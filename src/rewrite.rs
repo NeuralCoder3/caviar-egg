@@ -3,6 +3,70 @@ use std::{any::Any, sync::Arc};
 
 use crate::*;
 
+
+#[derive(Clone)]
+pub enum Term {
+    Var(String),
+    Function(String, Vec<Term>),
+}
+
+pub fn parse_term_rest(s: &str) -> (Term, &str) {
+    let s = s.trim();
+    if s.starts_with('(') {
+        let mut rest = &s[1..];
+        rest = rest.trim_start();
+        let mut func_name = String::new();
+        for c in rest.chars() {
+            if c.is_whitespace() || c == ')' {
+                break;
+            }
+            func_name.push(c);
+            rest = &rest[1..];
+        }
+        let mut args = vec![];
+        while !rest.trim_start().starts_with(')') {
+            let (arg, new_rest) = parse_term_rest(rest);
+            args.push(arg);
+            rest = new_rest;
+        }
+        rest = rest.trim_start();
+        rest = &rest[1..]; // skip ')'
+        (Term::Function(func_name, args), rest)
+    } else {
+        let mut var_name = String::new();
+        let mut rest = s;
+        for c in rest.chars() {
+            if c.is_whitespace() || c == ')' {
+                break;
+            }
+            var_name.push(c);
+            rest = &rest[1..];
+        }
+        if var_name.starts_with('?') {
+            (Term::Var(var_name), rest)
+        } else {
+            (Term::Function(var_name, vec![]), rest)
+        }
+    }
+}
+
+pub fn parse_term(s: &str) -> Term {
+    let (term, rest) = parse_term_rest(s);
+    assert!(rest.trim().is_empty(), "Unexpected input after term: \"{}\" for string \"{}\"", rest, s);
+    term
+}
+
+
+// Critical Pair computation
+// Given two rules, L1 -> R1 and L2 -> R2, find 
+// all ways they overlap (i.e., L1 matches a subterm of L2 or vice versa)
+// and produce the critical pairs L = unified this match, apply R1 and R2 respectively at the match site
+
+
+
+
+
+
 /// A rewrite that searches for the lefthand side and applies the righthand side.
 ///
 /// The [`rewrite!`] is the easiest way to create rewrites.
@@ -17,6 +81,11 @@ use crate::*;
 pub struct Rewrite<L, N> {
     /// The name of the rewrite.
     pub name: String,
+    // lhs: String,
+    // rhs: String,
+    lhs: Term,
+    rhs: Term,
+    cond: Vec<String>,
     /// The searcher (left-hand side) of the rewrite.
     pub searcher: Arc<dyn Searcher<L, N>>,
     /// The applier (right-hand side) of the rewrite.
@@ -61,12 +130,16 @@ impl<L: Language, N: Analysis<L>> Rewrite<L, N> {
     ///
     pub fn new(
         name: impl Into<String>,
+        lhs: String,
+        rhs: String,
+        cond: Vec<String>,
         searcher: impl Searcher<L, N> + 'static,
         applier: impl Applier<L, N> + 'static,
     ) -> Result<Self, String> {
         let name = name.into();
         let searcher = Arc::new(searcher);
         let applier = Arc::new(applier);
+        println!("Creating rewrite {} with conditions: {:?}", name, cond);
 
         let bound_vars = searcher.vars();
         for v in applier.vars() {
@@ -77,6 +150,9 @@ impl<L: Language, N: Analysis<L>> Rewrite<L, N> {
 
         Ok(Self {
             name,
+            lhs: parse_term(&lhs),
+            rhs: parse_term(&rhs),
+            cond,
             searcher,
             applier,
         })

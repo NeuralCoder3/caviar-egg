@@ -286,7 +286,13 @@ macro_rules! rewrite {
         let searcher = $crate::__rewrite!(@parse $lhs);
         let core_applier = $crate::__rewrite!(@parse $rhs);
         let applier = $crate::__rewrite!(@applier core_applier; $($cond,)*);
-        $crate::Rewrite::new($name, searcher, applier).unwrap()
+        // $crate::Rewrite::new($name, searcher, applier).unwrap()
+        // $crate::Rewrite::new($name, ($lhs).to_string(), ($rhs).to_string(), vec![$($cond,)*], searcher, applier).unwrap()
+        $crate::Rewrite::new($name, ($lhs).to_string(), ($rhs).to_string(), 
+            // vec![], 
+            // if cond given, collect their string representations
+            vec![$(stringify!($cond).to_string()),*],
+        searcher, applier).unwrap()
     }};
     (
         $name:expr;
