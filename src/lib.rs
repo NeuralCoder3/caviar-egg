@@ -27,7 +27,7 @@ mod extract;
 mod language;
 mod machine;
 mod pattern;
-mod rewrite;
+pub mod rewrite;
 mod run;
 mod subst;
 mod unionfind;

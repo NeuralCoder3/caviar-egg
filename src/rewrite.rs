@@ -1,13 +1,32 @@
-use std::fmt;
+use std::fmt::{self, Display};
 use std::{any::Any, sync::Arc};
 
 use crate::*;
 
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Term {
     Var(String),
     Function(String, Vec<Term>),
+}
+
+impl Display for Term {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Term::Var(v) => write!(f, "{}", v),
+            Term::Function(func, args) => {
+                if args.is_empty() {
+                    write!(f, "{}", func)
+                } else {
+                    write!(f, "({}", func)?;
+                    for arg in args {
+                        write!(f, " {}", arg)?;
+                    }
+                    write!(f, ")")
+                }
+            }
+        }
+    }
 }
 
 pub fn parse_term_rest(s: &str) -> (Term, &str) {
@@ -62,6 +81,291 @@ pub fn parse_term(s: &str) -> Term {
 // all ways they overlap (i.e., L1 matches a subterm of L2 or vice versa)
 // and produce the critical pairs L = unified this match, apply R1 and R2 respectively at the match site
 
+type Rule = (Term, Term);
+type VarSym = String;
+pub type Substitution = (VarSym, Term);
+pub type SubstitutionSet = Vec<Substitution>;
+
+/// Returns the union of two vectors (without duplicates).
+pub fn union<T: Clone + PartialEq>(mut v1: Vec<T>, v2: Vec<T>) -> Vec<T> {
+    for item in v2 {
+        if !v1.contains(&item) {
+            v1.push(item);
+        }
+    }
+    v1
+}
+
+/// Returns the intersection of two vectors.
+pub fn intersection<T: Clone + PartialEq>(v1: Vec<T>, v2: Vec<T>) -> Vec<T> {
+    v1.into_iter().filter(|x| v2.contains(x)).collect()
+}
+
+/// Subtracts all elements in `to_remove` from `v`.
+pub fn subtraction<T: Clone + PartialEq>(v: Vec<T>, to_remove: Vec<T>) -> Vec<T> {
+    v.into_iter().filter(|item| !to_remove.contains(item)).collect()
+}
+
+/// [vars t] returns the list of variable symbols occurring in [t].
+pub fn vars(t: &Term) -> Vec<VarSym> {
+    match t {
+        Term::Var(v) => vec![v.clone()],
+        Term::Function(_, ts) => varslist(ts),
+    }
+}
+
+/// [varslist ts] returns the union (without duplicates) of the variable lists of terms.
+pub fn varslist(ts: &[Term]) -> Vec<VarSym> {
+    ts.iter()
+        .map(|t| vars(t))
+        .fold(Vec::new(), |acc, v| union(acc, v))
+}
+
+
+/// [rename (old, new) t] replaces all occurrences of the variable [old] with [new] in [t].
+pub fn rename(r: &(VarSym, VarSym), t: &Term) -> Term {
+    match t {
+        Term::Var(x) if x == &r.0 => Term::Var(r.1.clone()),
+        Term::Var(_) => t.clone(),
+        Term::Function(f, ts) => Term::Function(f.clone(), renamelist(r, ts)),
+    }
+}
+
+/// Applies [rename] to each term in the list.
+pub fn renamelist(r: &(VarSym, VarSym), ts: &[Term]) -> Vec<Term> {
+    ts.iter().map(|t| rename(r, t)).collect()
+}
+
+/// [uniquevarstep xis x_i n ru] looks for a fresh variant for [x_i] (of the form (x, n))
+/// that is not yet in [xis] and renames [ru] accordingly. It returns the new rule and an updated list.
+pub fn uniquevarstep(
+    xis: &Vec<VarSym>,
+    x_i: &VarSym,
+    n: i32,
+    ru: &Rule,
+) -> (Rule, Vec<VarSym>) {
+    // let candidate = VarSym(x_i.0.clone(), n);
+    // let candidate = VarSym(x_i.0.clone(), n);
+    let candidate = format!("{}_{}", x_i, n);
+    if xis.contains(&candidate) {
+        uniquevarstep(xis, x_i, n + 1, ru)
+    } else {
+        let (l, r) = ru;
+        let new_l = rename(&(x_i.clone(), candidate.clone()), l);
+        let new_r = rename(&(x_i.clone(), candidate.clone()), r);
+        let new_rule = (new_l, new_r);
+        let mut new_xis = xis.clone();
+        new_xis.push(candidate);
+        new_xis = subtraction(new_xis, vec![x_i.clone()]);
+        (new_rule, new_xis)
+    }
+}
+
+pub fn uniquevarsub_ref(mut xis: Vec<VarSym>, ins: Vec<VarSym>, ru: (&Term, &Term)) -> Rule {
+    // let mut rule_current = ru;
+    let mut rule_current = (ru.0.clone(), ru.1.clone());
+    for xi in ins {
+        // let (new_rule, new_xis) = uniquevarstep_ref(&xis, &xi, 0, rule_current);
+        let (new_rule, new_xis) = uniquevarstep(&xis, &xi, 0, &rule_current);
+        rule_current = (new_rule.0, new_rule.1);
+        xis = new_xis;
+    }
+    rule_current
+}
+
+pub fn uniquevar_ref(ru: (&Term, &Term), ru_prime: (&Term, &Term)) -> (Rule, Rule) {
+    let (l, r) = ru;
+    let (l_prime, r_prime) = ru_prime;
+    let uni = union(vars(l), vars(r));
+    let ins = intersection(uni.clone(), union(vars(l_prime), vars(r_prime)));
+    let new_ru_prime = uniquevarsub_ref(uni, ins, ru_prime.clone());
+    let new_ru = (l.clone(), r.clone());
+    (new_ru, new_ru_prime)
+}
+
+
+
+
+/// Removes symmetric duplicates from a vector of pairs.
+fn remove_symmetric_duplicates(pairs: Vec<(Term, Term)>) -> Vec<(Term, Term)> {
+    let mut result = Vec::new();
+    for pair in pairs.into_iter() {
+        let (ref x, ref y) = pair;
+        if x == y {
+            // skip identical pairs
+            continue;
+        }
+        if !result
+            .iter()
+            .any(|(a, b)| (a == y && b == x) || (a == x && b == y))
+        {
+            result.push(pair);
+        }
+    }
+    result
+}
+
+
+/// Attempts to unify terms `t` and `t_prime` under the current substitution `subst`.
+/// Returns `Some(new_subst)` if successful, or `None` if unification fails.
+fn unify_with_subst(
+    subst_var: &SubstitutionSet,
+    t: &Term,
+    t_prime: &Term,
+) -> Option<SubstitutionSet> {
+    match t {
+        Term::Var(var) => {
+            match t_prime {
+                Term::Var(var_prime) if var == var_prime => Some(subst_var.clone()),
+                _ if vars(t_prime).contains(var) => None, // Occurs check
+                _ => {
+                    // Extend the substitution with (var -> t_prime) and update all mappings.
+                    let mut new_subst = vec![(var.clone(), t_prime.clone())];
+                    new_subst.extend(subst_var.iter().map(|(x, a)| {
+                        (x.clone(), subst(&vec![(var.clone(), t_prime.clone())], a))
+                    }));
+                    Some(new_subst)
+                }
+            }
+        }
+        Term::Function(f, ts) => match t_prime {
+            Term::Var(var_prime) => {
+                if vars(t).contains(var_prime) {
+                    None
+                } else {
+                    let mut new_subst = vec![(var_prime.clone(), t.clone())];
+                    new_subst.extend(subst_var.iter().map(|(x, a)| {
+                        (x.clone(), subst(&vec![(var_prime.clone(), t.clone())], a))
+                    }));
+                    Some(new_subst)
+                }
+            }
+            Term::Function(f_prime, ts_prime) if f == f_prime => {
+                unify_term_lists(subst_var.clone(), ts, ts_prime)
+            }
+            _ => None,
+        },
+    }
+}
+
+
+/// Finds a substitution for a variable in a substitution set.
+/// only lifetime in code
+pub fn find_substitution<'a>(xi: &'a VarSym, ss: &'a SubstitutionSet) -> Option<&'a Term> {
+    for (var, term) in ss {
+        if var == xi {
+            return Some(term);
+        }
+    }
+    None
+}
+
+
+/// [subst ss t] recursively applies the substitution set [ss] to term [t].
+pub fn subst(ss: &SubstitutionSet, t: &Term) -> Term {
+    match t {
+        Term::Var(xi) => {
+            if let Some(s) = find_substitution(xi, ss) {
+                s.clone()
+            } else {
+                t.clone()
+            }
+        }
+        Term::Function(f, ts) => {
+            let new_ts = ts.iter().map(|t| subst(ss, t)).collect();
+            Term::Function(f.clone(), new_ts)
+        }
+    }
+}
+
+/// Unifies two lists of terms under the current substitution.
+fn unify_term_lists(
+    subst_var: SubstitutionSet,
+    terms1: &[Term],
+    terms2: &[Term],
+) -> Option<SubstitutionSet> {
+    if terms1.len() != terms2.len() {
+        return None;
+    }
+    if terms1.is_empty() {
+        return Some(subst_var);
+    }
+    let new_subst = unify_with_subst(&subst_var, &terms1[0], &terms2[0])?;
+    let new_terms1: Vec<Term> = terms1[1..].iter().map(|t| subst(&new_subst, t)).collect();
+    let new_terms2: Vec<Term> = terms2[1..].iter().map(|t| subst(&new_subst, t)).collect();
+    unify_term_lists(new_subst, &new_terms1, &new_terms2)
+}
+
+/// A convenience function to unify two terms starting with an empty substitution.
+/// (The resulting substitution is “reversed”)
+fn unify(t: &Term, t_prime: &Term) -> Option<SubstitutionSet> {
+    let mut s = unify_with_subst(&vec![], t, t_prime)?;
+    s.reverse();
+    Some(s)
+}
+
+
+/// Computes parts of a critical pair from `term` and a rewrite rule `(l -> r)`.
+/// Returns a vector of pairs `(t, subst)` representing a potential overlap.
+fn critical_pair_parts(term: &Term, rule: &Rule) -> Vec<(Term, SubstitutionSet)> {
+    match term {
+        Term::Var(_) => vec![],
+        Term::Function(f, ts) => {
+            let (l, r) = rule;
+            let mut result = Vec::new();
+            if let Some(s) = unify(term, l) {
+                result.push((r.clone(), s));
+            }
+            let parts_list = critical_pair_parts_list(ts, rule);
+            for (ts_prime, s) in parts_list {
+                result.push((Term::Function(f.clone(), ts_prime), s));
+            }
+            result
+        }
+    }
+}
+
+/// Computes critical pair parts for a list of subterms given a rewrite rule.
+fn critical_pair_parts_list(ts: &[Term], rule: &Rule) -> Vec<(Vec<Term>, SubstitutionSet)> {
+    if ts.is_empty() {
+        vec![]
+    } else {
+        let mut results = Vec::new();
+        let first = &ts[0];
+        let rest = &ts[1..];
+        for (t_prime, s) in critical_pair_parts(first, rule) {
+            let mut new_ts = vec![t_prime];
+            new_ts.extend_from_slice(rest);
+            results.push((new_ts, s));
+        }
+        for (mut ts_prime, s) in critical_pair_parts_list(rest, rule) {
+            let mut new_ts = vec![first.clone()];
+            new_ts.append(&mut ts_prime);
+            results.push((new_ts, s));
+        }
+        results
+    }
+}
+
+/// Applies the substitution contained in each pair to both a term and the rule’s right–hand side.
+fn apply_cp_subst(r: &Term, pairs: Vec<(Term, SubstitutionSet)>) -> Vec<(Term, Term)> {
+    pairs
+        .into_iter()
+        .map(|(t, s)| (subst(&s, &t), subst(&s, r)))
+        .collect()
+}
+
+pub fn all_critical_pair_ref(rule1: (&Term, &Term), rule2: (&Term,&Term)) -> Vec<(Term, Term)> {
+    // Assume that `uniquevar` takes a pair of rules and returns a pair with variables renamed apart.
+    let (rule1_prime, rule2_prime) = uniquevar_ref(rule1, rule2);
+    let (l1, r1) = &rule1_prime;
+    let (l2, r2) = &rule2_prime;
+    let mut pairs = Vec::new();
+    pairs.extend(apply_cp_subst(r1, critical_pair_parts(l1, &rule2_prime)));
+    pairs.extend(apply_cp_subst(r2, critical_pair_parts(l2, &rule1_prime)));
+    remove_symmetric_duplicates(pairs)
+}
+
 
 
 
@@ -83,9 +387,9 @@ pub struct Rewrite<L, N> {
     pub name: String,
     // lhs: String,
     // rhs: String,
-    lhs: Term,
-    rhs: Term,
-    cond: Vec<String>,
+    pub lhs: Term,
+    pub rhs: Term,
+    pub cond: Vec<String>,
     /// The searcher (left-hand side) of the rewrite.
     pub searcher: Arc<dyn Searcher<L, N>>,
     /// The applier (right-hand side) of the rewrite.
@@ -139,7 +443,7 @@ impl<L: Language, N: Analysis<L>> Rewrite<L, N> {
         let name = name.into();
         let searcher = Arc::new(searcher);
         let applier = Arc::new(applier);
-        println!("Creating rewrite {} with conditions: {:?}", name, cond);
+        // println!("Creating rewrite {} with conditions: {:?}", name, cond);
 
         let bound_vars = searcher.vars();
         for v in applier.vars() {
