@@ -1,4 +1,5 @@
 use std::fmt::{self, Display};
+use std::str::FromStr;
 use std::{any::Any, sync::Arc};
 
 use crate::*;
@@ -365,6 +366,43 @@ pub fn all_critical_pair_ref(rule1: (&Term, &Term), rule2: (&Term,&Term)) -> Vec
     pairs.extend(apply_cp_subst(r2, critical_pair_parts(l2, &rule1_prime)));
     remove_symmetric_duplicates(pairs)
 }
+
+
+
+pub fn equation_to_rewrite<L: Language + Send + Sync + 'static, N: Analysis<L>>(x: Pattern<L>, y: Pattern<L>, name: String) -> Rewrite<L, N> {
+    let x_str = x.to_string();
+    let y_str = y.to_string();
+    Rewrite::new(name, x_str, y_str, vec![], x, y).unwrap()
+}
+
+pub fn rule_of_cp<L: Language + Send + Sync + 'static, N: Analysis<L>>(rule_name: &str, lhs: &Term, rhs: &Term) -> Rewrite<L, N> {
+    let lhs_pattern = Pattern::from_str(&lhs.to_string()).unwrap();
+    let rhs_pattern = Pattern::from_str(&rhs.to_string()).unwrap();
+    equation_to_rewrite(lhs_pattern, rhs_pattern, format!("cp-{}", rule_name))
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
