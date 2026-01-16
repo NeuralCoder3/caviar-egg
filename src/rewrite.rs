@@ -383,6 +383,92 @@ pub fn rule_of_cp<L: Language + Send + Sync + 'static, N: Analysis<L>>(rule_name
 
 
 
+// pub fn equation_to_rewrite_cond<L: Language + Send + Sync + 'static, N: Analysis<L>>(x: Pattern<L>, y: Pattern<L>, name: String, conds_str: Vec<String>, conds: Option<impl Fn(&mut EGraph<L, N>, Id, &Subst) -> bool>) -> Rewrite<L, N> {
+pub fn equation_to_rewrite_cond<L, N, F>(
+    x: Pattern<L>,
+    y: Pattern<L>,
+    name: String,
+    conds_str: Vec<String>,
+    conds: Option<F>, // Use the generic F here
+) -> Rewrite<L, N>
+where
+    L: Language + Send + Sync + 'static,
+    N: Analysis<L> + 'static,
+    // THE FIX: Explicitly require the closure to be Thread-Safe and Static
+    F: Fn(&mut EGraph<L, N>, Id, &Subst) -> bool + Send + Sync + 'static,
+{
+    let x_str = x.to_string();
+    let y_str = y.to_string();
+    // TODO: build applier from condition and base applier
+    // let base_applier: impl Applier<L, N> + 'static = y;
+    // let base_applier: Box<dyn Applier<L, N>> = Box::new(<dyn Applier<L,N>>::from(y));
+    // let base_applier: Box<impl Applier<L, N>> = Box::new(Applier::from(y));
+    // let base_applier = Applier::<L,N>::from(y);
+    // let base_applier: Box<dyn Applier<L, N>> = Box::new(y);
+    let applier =
+        if let Some(cond_fn) = conds {
+            let cond_applier = ConditionalApplier {
+                condition: cond_fn,
+                applier: y,
+                // _marker: std::marker::PhantomData,
+            };
+            CombinedApplier::WithCondition(cond_applier)
+        } else {
+            CombinedApplier::Plain(Arc::new(y))
+        };
+
+    Rewrite::new(name, x_str, y_str, conds_str, x, applier).unwrap()
+}
+
+// ["crate::trs::is_const_pos(\"?z\")", "crate::trs::is_const_pos(\"?c\")"]
+// pub fn rule_of_cp_cond<L: Language + Send + Sync + 'static, N: Analysis<L>>(rule_name: &str, lhs: &Term, rhs: &Term, conds_str: Vec<String>, conds: Option<impl Fn(&mut EGraph<L, N>, Id, &Subst) -> bool>) -> Rewrite<L, N> {
+pub fn rule_of_cp_cond<L, N, F>(rule_name: &str, lhs: &Term, rhs: &Term, conds_str: Vec<String>, conds: Option<F>) -> Rewrite<L, N>
+where
+    L: Language + Send + Sync + 'static,
+    N: Analysis<L> + 'static,
+    F: Fn(&mut EGraph<L, N>, Id, &Subst) -> bool + Send + Sync + 'static,
+{
+    let lhs_pattern = Pattern::from_str(&lhs.to_string()).unwrap();
+    let rhs_pattern = Pattern::from_str(&rhs.to_string()).unwrap();
+    equation_to_rewrite_cond(lhs_pattern, rhs_pattern, format!("cp-{}", rule_name), conds_str, conds)
+}
+
+
+// #[derive(Clone, Debug)]
+// pub struct PotentialConditionalApplier<C, A> {
+//     pub condition: Option<C>,
+//     pub applier: A,
+// }
+
+pub enum CombinedApplier<C, A, N, L> {
+    WithCondition(ConditionalApplier<C, A>), // Your custom struct
+    // Plain(Pattern<L>),                       // The basic pattern
+    Plain(Arc<dyn Applier<L, N>>)
+}
+
+impl<C, A, N, L> Applier<L, N> for CombinedApplier<C, A, N, L>
+where
+    L: Language,
+    C: Condition<L, N>,
+    A: Applier<L, N>,
+    N: Analysis<L>,
+{
+    fn apply_one(&self, egraph: &mut EGraph<L, N>, eclass: Id, subst: &Subst) -> Vec<Id> {
+        match self {
+            // DELEGATION HAPPENS HERE:
+            // We just call .apply_one() on the inner object.
+            CombinedApplier::WithCondition(c) => c.apply_one(egraph, eclass, subst),
+            CombinedApplier::Plain(p) => p.apply_one(egraph, eclass, subst),
+        }
+    }
+    
+    fn vars(&self) -> Vec<Var> {
+        match self {
+            CombinedApplier::WithCondition(c) => c.vars(),
+            CombinedApplier::Plain(p) => p.vars(),
+        }
+    }
+}
 
 
 
