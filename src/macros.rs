@@ -281,19 +281,61 @@ macro_rules! rewrite {
     (
         $name:expr;
         $lhs:tt => $rhs:tt
-        $(if $cond:expr)*
+    )  => {{
+        let searcher = $crate::__rewrite!(@parse $lhs);
+        let core_applier = $crate::__rewrite!(@parse $rhs);
+        let applier = core_applier;
+        $crate::Rewrite::new(
+            $name,
+            ($lhs).to_string(),
+            ($rhs).to_string(),
+            // no conditions given
+            vec![],
+            // None::<fn(&mut _, _, _) -> bool>,
+            // None::<std::sync::Arc<dyn egg::Condition<_, _>>>,
+            None,
+            searcher,
+            applier,
+        ).unwrap()
+    }};
+
+    (
+        $name:expr;
+        $lhs:tt => $rhs:tt
+        $(if $cond:expr)+
     )  => {{
         let searcher = $crate::__rewrite!(@parse $lhs);
         let core_applier = $crate::__rewrite!(@parse $rhs);
         let applier = $crate::__rewrite!(@applier core_applier; $($cond,)*);
-        // $crate::Rewrite::new($name, searcher, applier).unwrap()
-        // $crate::Rewrite::new($name, ($lhs).to_string(), ($rhs).to_string(), vec![$($cond,)*], searcher, applier).unwrap()
-        $crate::Rewrite::new($name, ($lhs).to_string(), ($rhs).to_string(), 
-            // vec![], 
-            // if cond given, collect their string representations
+        $crate::rewrite::new_with_condition(
+            $name,
+            ($lhs).to_string(),
+            ($rhs).to_string(),
             vec![$(stringify!($cond).to_string()),*],
-        searcher, applier).unwrap()
+            move |egraph, id, subst| {
+                true $(&& ($cond)(egraph, id, subst))*
+            },
+            searcher,
+            applier,
+        )
+        // $crate::Rewrite::new(
+        //     $name,
+        //     ($lhs).to_string(),
+        //     ($rhs).to_string(),
+        //     // collect string representations of conditions
+        //     vec![$(stringify!($cond).to_string()),*],
+        //     // combined condition: call each provided condition and AND the results
+        //     // Some(std::sync::Arc::new(move |egraph, id, subst| {
+        //     //     true $(&& ($cond)(egraph, id, subst))*
+        //     // })),
+        //     Some(std::sync::Arc::new($crate::rewrite::FnCondition(move |egraph, id, subst| {
+        //         true $(&& ($cond)(egraph, id, subst))*
+        //     }))),
+        //     searcher,
+        //     applier,
+        // ).unwrap()
     }};
+
     (
         $name:expr;
         $lhs:tt <=> $rhs:tt
