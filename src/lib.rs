@@ -1,4 +1,4 @@
-#![warn(missing_docs)]
+#![allow(missing_docs)]
 /*!
 
 `egg` (**e**-**g**raphs **g**ood) is a e-graph library optimized for equality saturation.

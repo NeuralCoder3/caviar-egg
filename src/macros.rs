@@ -290,10 +290,10 @@ macro_rules! rewrite {
             ($lhs).to_string(),
             ($rhs).to_string(),
             // no conditions given
-            vec![],
+            // vec![],
             // None::<fn(&mut _, _, _) -> bool>,
             // None::<std::sync::Arc<dyn egg::Condition<_, _>>>,
-            None,
+            // None,
             searcher,
             applier,
         ).unwrap()
@@ -311,10 +311,10 @@ macro_rules! rewrite {
             $name,
             ($lhs).to_string(),
             ($rhs).to_string(),
-            vec![$(stringify!($cond).to_string()),*],
-            move |egraph, id, subst| {
-                true $(&& ($cond)(egraph, id, subst))*
-            },
+            // vec![$(stringify!($cond).to_string()),*],
+            // move |egraph, id, subst| {
+            //     true $(&& ($cond)(egraph, id, subst))*
+            // },
             searcher,
             applier,
         )

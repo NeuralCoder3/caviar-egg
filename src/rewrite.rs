@@ -372,7 +372,8 @@ pub fn all_critical_pair_ref(rule1: (&Term, &Term), rule2: (&Term,&Term)) -> Vec
 pub fn equation_to_rewrite<L: Language + Send + Sync + 'static, N: Analysis<L> + 'static>(x: Pattern<L>, y: Pattern<L>, name: String) -> Rewrite<L, N> {
     let x_str = x.to_string();
     let y_str = y.to_string();
-    Rewrite::new(name, x_str, y_str, vec![], None::<Arc<dyn Condition<L, N>>>, x, y).unwrap()
+    // Rewrite::new(name, x_str, y_str, vec![], None::<Arc<dyn Condition<L, N>>>, x, y).unwrap()
+    Rewrite::new(name, x_str, y_str, x, y).unwrap()
 }
 
 pub fn rule_of_cp<L: Language + Send + Sync + 'static, N: Analysis<L> + 'static>(rule_name: &str, lhs: &Term, rhs: &Term) -> Rewrite<L, N> {
@@ -384,55 +385,55 @@ pub fn rule_of_cp<L: Language + Send + Sync + 'static, N: Analysis<L> + 'static>
 
 
 // pub fn equation_to_rewrite_cond<L: Language + Send + Sync + 'static, N: Analysis<L>>(x: Pattern<L>, y: Pattern<L>, name: String, conds_str: Vec<String>, conds: Option<impl Fn(&mut EGraph<L, N>, Id, &Subst) -> bool>) -> Rewrite<L, N> {
-pub fn equation_to_rewrite_cond<L, N, F>(
-    x: Pattern<L>,
-    y: Pattern<L>,
-    name: String,
-    conds_str: Vec<String>,
-    conds: Option<F>,
-    // conds: Option<Box<dyn Condition<L,N>>>
-) -> Rewrite<L, N>
-where
-    L: Language + Send + Sync + 'static,
-    N: Analysis<L> + 'static,
-    F: Condition<L,N> + 'static,
-{
-    let x_str = x.to_string();
-    let y_str = y.to_string();
-    // Convert the provided condition into an Arc<dyn Condition<..>> so we can both
-    // use it to build the ConditionalApplier and pass it into Rewrite::new.
-    let conds_arc: Option<Arc<dyn Condition<L, N>>> =
-        conds.map(|c| Arc::new(c) as Arc<dyn Condition<L, N>>);
+// pub fn equation_to_rewrite_cond<L, N, F>(
+//     x: Pattern<L>,
+//     y: Pattern<L>,
+//     name: String,
+//     conds_str: Vec<String>,
+//     conds: Option<F>,
+//     // conds: Option<Box<dyn Condition<L,N>>>
+// ) -> Rewrite<L, N>
+// where
+//     L: Language + Send + Sync + 'static,
+//     N: Analysis<L> + 'static,
+//     F: Condition<L,N> + 'static,
+// {
+//     let x_str = x.to_string();
+//     let y_str = y.to_string();
+//     // Convert the provided condition into an Arc<dyn Condition<..>> so we can both
+//     // use it to build the ConditionalApplier and pass it into Rewrite::new.
+//     let conds_arc: Option<Arc<dyn Condition<L, N>>> =
+//         conds.map(|c| Arc::new(c) as Arc<dyn Condition<L, N>>);
 
-    let applier = if let Some(cond_arc) = conds_arc.clone() {
-        let cond_applier = ConditionalApplier {
-            condition: cond_arc,
-            applier: y,
-            // _marker: std::marker::PhantomData,
-        };
-        CombinedApplier::WithCondition(cond_applier)
-    } else {
-        CombinedApplier::Plain(Arc::new(y))
-    };
+//     let applier = if let Some(cond_arc) = conds_arc.clone() {
+//         let cond_applier = ConditionalApplier {
+//             condition: cond_arc,
+//             applier: y,
+//             // _marker: std::marker::PhantomData,
+//         };
+//         CombinedApplier::WithCondition(cond_applier)
+//     } else {
+//         CombinedApplier::Plain(Arc::new(y))
+//     };
 
-    Rewrite::new(name, x_str, y_str, conds_str, conds_arc, x, applier).unwrap()
-}
+//     Rewrite::new(name, x_str, y_str, conds_str, conds_arc, x, applier).unwrap()
+// }
 
 // ["crate::trs::is_const_pos(\"?z\")", "crate::trs::is_const_pos(\"?c\")"]
 // pub fn rule_of_cp_cond<L: Language + Send + Sync + 'static, N: Analysis<L>>(rule_name: &str, lhs: &Term, rhs: &Term, conds_str: Vec<String>, conds: Option<impl Fn(&mut EGraph<L, N>, Id, &Subst) -> bool>) -> Rewrite<L, N> {
-pub fn rule_of_cp_cond<L, N, F>(rule_name: &str, lhs: &Term, rhs: &Term, conds_str: Vec<String>, 
-    conds: Option<F>
-    // conds: Option<Box<dyn Condition<L,N>>>
-) -> Rewrite<L, N>
-where
-    L: Language + Send + Sync + 'static,
-    N: Analysis<L> + 'static,
-    F: Condition<L,N> + 'static
-{
-    let lhs_pattern = Pattern::from_str(&lhs.to_string()).unwrap();
-    let rhs_pattern = Pattern::from_str(&rhs.to_string()).unwrap();
-    equation_to_rewrite_cond(lhs_pattern, rhs_pattern, format!("cp-{}", rule_name), conds_str, conds)
-}
+// pub fn rule_of_cp_cond<L, N, F>(rule_name: &str, lhs: &Term, rhs: &Term, conds_str: Vec<String>, 
+//     conds: Option<F>
+//     // conds: Option<Box<dyn Condition<L,N>>>
+// ) -> Rewrite<L, N>
+// where
+//     L: Language + Send + Sync + 'static,
+//     N: Analysis<L> + 'static,
+//     F: Condition<L,N> + 'static
+// {
+//     let lhs_pattern = Pattern::from_str(&lhs.to_string()).unwrap();
+//     let rhs_pattern = Pattern::from_str(&rhs.to_string()).unwrap();
+//     equation_to_rewrite_cond(lhs_pattern, rhs_pattern, format!("cp-{}", rule_name), conds_str, conds)
+// }
 
 
 // #[derive(Clone, Debug)]
@@ -514,8 +515,8 @@ pub struct Rewrite<L, N> {
     // rhs: String,
     pub lhs: Term,
     pub rhs: Term,
-    pub cond: Vec<String>,
-    pub conds: Option<Arc<dyn Condition<L,N>>>,
+    // pub cond: Vec<String>,
+    // pub conds: Option<Arc<dyn Condition<L,N>>>,
     /// The searcher (left-hand side) of the rewrite.
     pub searcher: Arc<dyn Searcher<L, N>>,
     /// The applier (right-hand side) of the rewrite.
@@ -532,12 +533,14 @@ where
         d.field("name", &self.name);
 
         if let Some(pat) = Any::downcast_ref::<Pattern<L>>(&self.searcher) {
+        // if let Some(pat) = (&*self.searcher as &dyn Any).downcast_ref::<Pattern<L>>() {
             d.field("searcher", &DisplayAsDebug(pat));
         } else {
             d.field("searcher", &"<< searcher >>");
         }
 
         if let Some(pat) = Any::downcast_ref::<Pattern<L>>(&self.applier) {
+        // if let Some(pat) = (&*self.applier as &dyn Any).downcast_ref::<Pattern<L>>() {
             d.field("applier", &DisplayAsDebug(pat));
         } else {
             d.field("applier", &"<< applier >>");
@@ -562,9 +565,9 @@ impl<L: Language, N: Analysis<L>> Rewrite<L, N> {
         name: impl Into<String>,
         lhs: String,
         rhs: String,
-        cond: Vec<String>,
+        // cond: Vec<String>,
         // conds: Option<impl Condition<L,N> + 'static>,
-        conds: Option<Arc<dyn Condition<L,N>>>,
+        // conds: Option<Arc<dyn Condition<L,N>>>,
         searcher: impl Searcher<L, N> + 'static,
         applier: impl Applier<L, N> + 'static,
     ) -> Result<Self, String> {
@@ -585,8 +588,8 @@ impl<L: Language, N: Analysis<L>> Rewrite<L, N> {
             name,
             lhs: parse_term(&lhs),
             rhs: parse_term(&rhs),
-            cond,
-            conds,
+            // cond,
+            // conds,
             searcher,
             applier,
         })
@@ -632,25 +635,46 @@ impl<L: Language, N: Analysis<L>> Rewrite<L, N> {
 
 /// Helper to construct a `Rewrite` when the condition is given as a closure.
 /// This wraps the closure in `FnCondition` and boxes it into an `Arc<dyn Condition<..>>`.
-pub fn new_with_condition<L, N, F, S, A>(
+// pub fn new_with_condition<L, N, F, S, A>(
+//     name: impl Into<String>,
+//     lhs: String,
+//     rhs: String,
+//     cond: Vec<String>,
+//     conds: F,
+//     searcher: S,
+//     applier: A,
+// ) -> Rewrite<L, N>
+// where
+//     L: Language + Send + Sync + 'static,
+//     N: Analysis<L> + 'static,
+//     F: Fn(&mut EGraph<L, N>, Id, &Subst) -> bool + 'static,
+//     S: Searcher<L, N> + 'static,
+//     A: Applier<L, N> + 'static,
+// {
+//     let conds_arc: Option<Arc<dyn Condition<L, N>>> =
+//         Some(Arc::new(FnCondition(conds)) as Arc<dyn Condition<L, N>>);
+//     Rewrite::new(name, lhs, rhs, cond, conds_arc, searcher, applier).unwrap()
+// }
+pub fn new_with_condition<L, N, S, A>(
     name: impl Into<String>,
     lhs: String,
     rhs: String,
-    cond: Vec<String>,
-    conds: F,
+    // cond: Vec<String>,
+    // conds: F,
     searcher: S,
     applier: A,
 ) -> Rewrite<L, N>
 where
     L: Language + Send + Sync + 'static,
     N: Analysis<L> + 'static,
-    F: Fn(&mut EGraph<L, N>, Id, &Subst) -> bool + 'static,
+    // F: Fn(&mut EGraph<L, N>, Id, &Subst) -> bool + 'static,
     S: Searcher<L, N> + 'static,
     A: Applier<L, N> + 'static,
 {
-    let conds_arc: Option<Arc<dyn Condition<L, N>>> =
-        Some(Arc::new(FnCondition(conds)) as Arc<dyn Condition<L, N>>);
-    Rewrite::new(name, lhs, rhs, cond, conds_arc, searcher, applier).unwrap()
+    // let conds_arc: Option<Arc<dyn Condition<L, N>>> =
+    //     Some(Arc::new(FnCondition(conds)) as Arc<dyn Condition<L, N>>);
+    // Rewrite::new(name, lhs, rhs, cond, conds_arc, searcher, applier).unwrap()
+    Rewrite::new(name, lhs, rhs, searcher, applier).unwrap()
 }
 
 

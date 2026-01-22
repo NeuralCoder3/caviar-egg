@@ -166,7 +166,7 @@ impl<L: Language, N: Analysis<L>> EGraph<L, N> {
 
     /// Creates a [`Dot`] to visualize this egraph. See [`Dot`].
     ///
-    pub fn dot(&self) -> Dot<L, N> {
+    pub fn dot(&self) -> Dot<'_, L, N> {
         Dot { egraph: self }
     }
 }
