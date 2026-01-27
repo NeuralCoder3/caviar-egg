@@ -144,7 +144,7 @@ pub fn uniquevarstep(
     x_i: &VarSym,
     n: i32,
     ru: &Rule,
-) -> (Rule, Vec<VarSym>) {
+) -> (Rule, Vec<VarSym>, (VarSym,VarSym)) {
     // let candidate = VarSym(x_i.0.clone(), n);
     // let candidate = VarSym(x_i.0.clone(), n);
     let candidate = format!("{}_{}", x_i, n);
@@ -156,32 +156,36 @@ pub fn uniquevarstep(
         let new_r = rename(&(x_i.clone(), candidate.clone()), r);
         let new_rule = (new_l, new_r);
         let mut new_xis = xis.clone();
-        new_xis.push(candidate);
+        new_xis.push(candidate.clone());
         new_xis = subtraction(new_xis, vec![x_i.clone()]);
-        (new_rule, new_xis)
+        (new_rule, new_xis, (x_i.clone(), candidate))
     }
 }
 
-pub fn uniquevarsub_ref(mut xis: Vec<VarSym>, ins: Vec<VarSym>, ru: (&Term, &Term)) -> Rule {
+pub fn uniquevarsub_ref(mut xis: Vec<VarSym>, ins: Vec<VarSym>, ru: (&Term, &Term)) -> (Rule,Vec<(VarSym,VarSym)>) {
     // let mut rule_current = ru;
     let mut rule_current = (ru.0.clone(), ru.1.clone());
+    let mut subst = vec![];
     for xi in ins {
         // let (new_rule, new_xis) = uniquevarstep_ref(&xis, &xi, 0, rule_current);
-        let (new_rule, new_xis) = uniquevarstep(&xis, &xi, 0, &rule_current);
+        let (new_rule, new_xis, new_subst) = uniquevarstep(&xis, &xi, 0, &rule_current);
         rule_current = (new_rule.0, new_rule.1);
         xis = new_xis;
+        subst.push(new_subst);
     }
-    rule_current
+    (rule_current, subst)
 }
 
-pub fn uniquevar_ref(ru: (&Term, &Term), ru_prime: (&Term, &Term)) -> (Rule, Rule) {
+pub fn uniquevar_ref(ru: (&Term, &Term), ru_prime: (&Term, &Term)) -> (Rule, Rule, Vec<(VarSym,VarSym)>) {
     let (l, r) = ru;
     let (l_prime, r_prime) = ru_prime;
-    let uni = union(vars(l), vars(r));
-    let ins = intersection(uni.clone(), union(vars(l_prime), vars(r_prime)));
-    let new_ru_prime = uniquevarsub_ref(uni, ins, ru_prime.clone());
-    let new_ru = (l.clone(), r.clone());
-    (new_ru, new_ru_prime)
+    let uni = union(vars(l), vars(r)); // vars rule 1
+    let ins = intersection(uni.clone(),  // get variables in both
+         union(vars(l_prime), vars(r_prime)) // vars rule 2
+    );
+    let (new_ru_prime, subst) = uniquevarsub_ref(uni, ins, ru_prime.clone()); // rename right
+    let new_ru = (l.clone(), r.clone()); // left stays
+    (new_ru, new_ru_prime, subst)
 }
 
 
@@ -356,15 +360,16 @@ fn apply_cp_subst(r: &Term, pairs: Vec<(Term, SubstitutionSet)>) -> Vec<(Term, T
         .collect()
 }
 
-pub fn all_critical_pair_ref(rule1: (&Term, &Term), rule2: (&Term,&Term)) -> Vec<(Term, Term)> {
+pub fn all_critical_pair_ref(rule1: (&Term, &Term), rule2: (&Term,&Term)) -> Vec<(Term, Term, Vec<(VarSym,VarSym)>)> {
     // Assume that `uniquevar` takes a pair of rules and returns a pair with variables renamed apart.
-    let (rule1_prime, rule2_prime) = uniquevar_ref(rule1, rule2);
+    let (rule1_prime, rule2_prime, subst) = uniquevar_ref(rule1, rule2);
     let (l1, r1) = &rule1_prime;
     let (l2, r2) = &rule2_prime;
     let mut pairs = Vec::new();
     pairs.extend(apply_cp_subst(r1, critical_pair_parts(l1, &rule2_prime)));
     pairs.extend(apply_cp_subst(r2, critical_pair_parts(l2, &rule1_prime)));
     remove_symmetric_duplicates(pairs)
+    .into_iter().map(|(x,y)| (x,y,subst.clone())).collect()
 }
 
 
