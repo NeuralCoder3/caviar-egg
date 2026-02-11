@@ -76,6 +76,13 @@ pub fn parse_term(s: &str) -> Term {
     term
 }
 
+pub fn term_size(t: &Term) -> usize {
+    match t {
+        Term::Var(_) => 1,
+        Term::Function(_, ts) => 1 + ts.iter().map(|t| term_size(t)).sum::<usize>(),
+    }
+}
+
 
 // Critical Pair computation
 // Given two rules, L1 -> R1 and L2 -> R2, find 
