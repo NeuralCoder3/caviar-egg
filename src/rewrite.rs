@@ -199,17 +199,17 @@ pub fn uniquevar_ref(ru: (&Term, &Term), ru_prime: (&Term, &Term)) -> (Rule, Rul
 
 
 /// Removes symmetric duplicates from a vector of pairs.
-fn remove_symmetric_duplicates(pairs: Vec<(Term, Term)>) -> Vec<(Term, Term)> {
+fn remove_symmetric_duplicates(pairs: Vec<(Term, Term, SubstitutionSet)>) -> Vec<(Term, Term, SubstitutionSet)> {
     let mut result = Vec::new();
     for pair in pairs.into_iter() {
-        let (ref x, ref y) = pair;
+        let (ref x, ref y, _) = pair;
         if x == y {
             // skip identical pairs
             continue;
         }
         if !result
             .iter()
-            .any(|(a, b)| (a == y && b == x) || (a == x && b == y))
+            .any(|(a, b, _)| (a == y && b == x) || (a == x && b == y))
         {
             result.push(pair);
         }
@@ -360,23 +360,23 @@ fn critical_pair_parts_list(ts: &[Term], rule: &Rule) -> Vec<(Vec<Term>, Substit
 }
 
 /// Applies the substitution contained in each pair to both a term and the rule’s right–hand side.
-fn apply_cp_subst(r: &Term, pairs: Vec<(Term, SubstitutionSet)>) -> Vec<(Term, Term)> {
+fn apply_cp_subst(r: &Term, pairs: Vec<(Term, SubstitutionSet)>) -> Vec<(Term, Term, SubstitutionSet)> {
     pairs
         .into_iter()
-        .map(|(t, s)| (subst(&s, &t), subst(&s, r)))
+        .map(|(t, s)| (subst(&s, &t), subst(&s, r), s))
         .collect()
 }
 
-pub fn all_critical_pair_ref(rule1: (&Term, &Term), rule2: (&Term,&Term)) -> Vec<(Term, Term, Vec<(VarSym,VarSym)>)> {
+pub fn all_critical_pair_ref(rule1: (&Term, &Term), rule2: (&Term,&Term)) -> Vec<(Term, Term, SubstitutionSet, Vec<(VarSym,VarSym)>)> {
     // Assume that `uniquevar` takes a pair of rules and returns a pair with variables renamed apart.
-    let (rule1_prime, rule2_prime, subst) = uniquevar_ref(rule1, rule2);
+    let (rule1_prime, rule2_prime, prime_subst) = uniquevar_ref(rule1, rule2);
     let (l1, r1) = &rule1_prime;
     let (l2, r2) = &rule2_prime;
     let mut pairs = Vec::new();
     pairs.extend(apply_cp_subst(r1, critical_pair_parts(l1, &rule2_prime)));
     pairs.extend(apply_cp_subst(r2, critical_pair_parts(l2, &rule1_prime)));
     remove_symmetric_duplicates(pairs)
-    .into_iter().map(|(x,y)| (x,y,subst.clone())).collect()
+    .into_iter().map(|(x,y, unifier)| (x,y,unifier,prime_subst.clone())).collect()
 }
 
 
