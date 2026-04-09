@@ -169,19 +169,56 @@ pub fn uniquevarstep(
     }
 }
 
-pub fn uniquevarsub_ref(mut xis: Vec<VarSym>, ins: Vec<VarSym>, ru: (&Term, &Term)) -> (Rule,Vec<(VarSym,VarSym)>) {
-    // let mut rule_current = ru;
-    let mut rule_current = (ru.0.clone(), ru.1.clone());
-    let mut subst = vec![];
-    for xi in ins {
-        // let (new_rule, new_xis) = uniquevarstep_ref(&xis, &xi, 0, rule_current);
-        let (new_rule, new_xis, new_subst) = uniquevarstep(&xis, &xi, 0, &rule_current);
-        rule_current = (new_rule.0, new_rule.1);
-        xis = new_xis;
-        subst.push(new_subst);
+
+pub fn rename_all(r: &[(VarSym, VarSym)], t: &Term) -> Term {
+    match t {
+        Term::Var(x) => {
+            for (old, new) in r {
+                if x == old {
+                    return Term::Var(new.clone());
+                }
+            }
+            Term::Var(x.clone())
+        },
+        Term::Function(f, ts) => {
+            Term::Function(f.clone(), ts.iter().map(|child| rename_all(r, child)).collect())
+        }
     }
-    (rule_current, subst)
 }
+
+pub fn uniquevarsub_ref(mut xis: Vec<VarSym>, ins: Vec<VarSym>, ru: (&Term, &Term)) -> (Rule, Vec<(VarSym,VarSym)>) {
+    let mut subst = Vec::with_capacity(ins.len());
+    
+    for xi in ins {
+        let mut n = 0;
+        let mut candidate = format!("{}_{}", xi, n);
+        while xis.contains(&candidate) {
+            n += 1;
+            candidate = format!("{}_{}", xi, n);
+        }
+        xis.push(candidate.clone());
+        subst.push((xi, candidate));
+    }
+    
+    // Perform EXACTLY ONE full AST clone!
+    let new_l = rename_all(&subst, ru.0);
+    let new_r = rename_all(&subst, ru.1);
+    
+    ((new_l, new_r), subst)
+}
+// pub fn uniquevarsub_ref(mut xis: Vec<VarSym>, ins: Vec<VarSym>, ru: (&Term, &Term)) -> (Rule,Vec<(VarSym,VarSym)>) {
+//     // let mut rule_current = ru;
+//     let mut rule_current = (ru.0.clone(), ru.1.clone());
+//     let mut subst = vec![];
+//     for xi in ins {
+//         // let (new_rule, new_xis) = uniquevarstep_ref(&xis, &xi, 0, rule_current);
+//         let (new_rule, new_xis, new_subst) = uniquevarstep(&xis, &xi, 0, &rule_current);
+//         rule_current = (new_rule.0, new_rule.1);
+//         xis = new_xis;
+//         subst.push(new_subst);
+//     }
+//     (rule_current, subst)
+// }
 
 pub fn uniquevar_ref(ru: (&Term, &Term), ru_prime: (&Term, &Term)) -> (Rule, Rule, Vec<(VarSym,VarSym)>) {
     let (l, r) = ru;
@@ -719,6 +756,13 @@ where
 
     /// Returns a list of the variables bound by this Searcher
     fn vars(&self) -> Vec<Var>;
+
+    /// Finds all matching eclasses. 
+    /// The default implementation just maps over `search`, but 
+    /// types like `Pattern` can override this for zero-allocation matching!
+    fn find_matching_eclasses(&self, egraph: &EGraph<L, N>) -> Vec<Id> {
+        self.search(egraph).into_iter().map(|m| m.eclass).collect()
+    }
 }
 
 /// The righthand side of a [`Rewrite`].

@@ -86,6 +86,25 @@ impl<L: Language> Pattern<L> {
     pub fn pretty(&self, width: usize) -> String {
         self.ast.pretty(width)
     }
+
+fn find_matching_eclasses<A>(&self, egraph: &EGraph<L, A>) -> Vec<Id> 
+where A: Analysis<L>
+{
+    match self.ast.as_ref().last().unwrap() {
+        ENodeOrVar::ENode(e) => {
+            #[allow(clippy::mem_discriminant_non_enum)]
+            let key = std::mem::discriminant(e);
+            match egraph.classes_by_op.get(&key) {
+                None => vec![],
+                // Pass the iterator directly to the program
+                Some(ids) => self.program.find_matching_eclasses(egraph, ids.iter().copied()),
+            }
+        }
+        ENodeOrVar::Var(_) => {
+            self.program.find_matching_eclasses(egraph, egraph.classes().map(|e| e.id))
+        }
+    }
+}
 }
 
 /// The language of [`Pattern`]s.

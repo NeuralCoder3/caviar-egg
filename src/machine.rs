@@ -205,6 +205,33 @@ impl<'a, L: Language> Compiler<'a, L> {
 }
 
 impl<L: Language> Program<L> {
+pub fn find_matching_eclasses<A>(&self, egraph: &EGraph<L, A>, target_classes: impl Iterator<Item=Id>) -> Vec<Id> 
+where A: Analysis<L> 
+{
+    let mut machine = Machine::default(); // EXACTLY ONE ALLOCATION!
+    let mut matches = Vec::new();
+    
+    for eclass in target_classes {
+        machine.reg.clear(); // Reuse the vector capacity!
+        machine.reg.push(eclass);
+        
+        let mut matched = false;
+        machine.run(
+            egraph,
+            &self.instructions,
+            &self.subst,
+            &mut |_machine, _subst| {
+                matched = true; 
+            },
+        );
+        
+        if matched {
+            matches.push(eclass);
+        }
+    }
+    matches
+}
+
     pub(crate) fn compile_from_pat(pattern: &PatternAst<L>) -> Self {
         let program = Compiler::compile(pattern.as_ref());
         log::debug!("Compiled {:?} to {:?}", pattern.as_ref(), program);
